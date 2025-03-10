@@ -14,56 +14,62 @@ library(stringr)
 
 data_Import <- read.csv(here("Data", "MetaAnalysis_SedCorgStockData.csv"))
 
-## Add genus and species size to the dataset.
+
+## Number of each species (Single species meadows), genus, and size 
+
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Genus != "undefined" & Genus != "Multiple") %>% summarize(n = n(), cores = sum(cores)))
+View(data_Import[!grepl("[,.]", data_Import$Species), ] %>% group_by(Species) %>% filter(Genus != "undefined" & Genus != "Multiple") %>% summarize(n = n(), cores = sum(cores)))
+head(data_Import %>% group_by(Genus) %>% summarize(n = n()))
+head(data_Import %>% group_by(Life_History) %>% summarize(n = n()))
+
+## Species with fewer than 3 observations
+    ## Halodule emarginata, Halophila Baillonii, Zostera Caulescens, Zostera chilensis
+
+## Number of each bioregion
+
+head(data_Import %>% group_by(Bioregion) %>% summarize(n = n()))
+
+## Number of Hydrologic setting and Tidal class
+
+head(data_Import %>% group_by(Hydrologic_Setting) %>% summarize(n = n()))
+head(data_Import %>% group_by(Tidal_Class) %>% summarize(n = n()))
+
+## Number of each predictor within each bioregion
+
+head(data_Import %>% filter(Hydrologic_Setting != "") %>% group_by(Bioregion, Hydrologic_Setting) %>% summarize(n = n()))
+head(data_Import %>% filter(Tidal_Class != "") %>% group_by(Bioregion, Tidal_Class) %>% summarize(n = n()))
+head(data_Import %>% filter(Life_History != "undefined" & Life_History != "multiple") %>% group_by(Bioregion, Life_History) %>% summarize(n = n()))
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% group_by(Bioregion, Species) %>% filter(Genus != "undefined" & Genus != "Multiple") %>% summarize(n = n()))
+
+## Number of observations containing all predictors (excluding species identity)
+
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Species != "Multiple" & Species != "undefined" & Genus != "Multiple" & Tidal_Class != "" & Hydrologic_Setting != "") %>% summarize(n = n()))
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Species != "Multiple" & Species != "undefined" & Genus != "Multiple" & Tidal_Class != "" & Hydrologic_Setting != "") %>% group_by(Bioregion) %>% summarize(n = n()))
+
+## Number of observations with both Tidal Class and Geomorphology
+
+# Global
+head(data_Import %>% filter(Hydrologic_Setting != "" & Tidal_Class != "") %>% summarize(n = n()))
+
+# By Bioregion
+head(data_Import %>% filter(Hydrologic_Setting != "" & Tidal_Class != "") %>% group_by(Bioregion) %>% summarize(n = n()))
 
 
+## Number of observations with both Tidal Class and Species Life-History
 
-data_Species <- data_Import %>% filter()
+# Global
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Species != "Multiple" & Species != "undefined" & Genus != "Multiple" & Tidal_Class != "") %>% summarize(n = n()))
 
-## Number of each species, genus, and size
+# By Bioregion
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Species != "Multiple" & Species != "undefined" & Genus != "Multiple" & Tidal_Class != "") %>% group_by(Bioregion) %>% summarize(n = n()))
 
-View(data_Import[!grepl("[,.]", data_Import$Species), ] %>% group_by(Species) %>% filter(Genus != "undefined" & Genus != "Multiple") %>% summarize(n = n()))
-View(data_Import %>% group_by(Genus) %>% summarize(n = n()))
-View(data_Import %>% group_by(Life_History) %>% summarize(n = n()))
+## Number of observations with both Hydrologic Setting and Species Life-History
 
+# Global
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Species != "Multiple" & Species != "undefined" & Genus != "Multiple" & Hydrologic_Setting != "") %>% summarize(n = n()))
 
-
-## Make tables for each category of species number and if they're defined.
-
-data_SingleSpecies <- data_Species %>% filter(Species != "" & Species != "Mixed" & Species != "Multiple")
-data_SingleSpecies <- data_SingleSpecies[!grepl("[,.]", data_SingleSpecies$Species), ]
-
-data_MultipleDefined <- data_Species %>% filter(Species != "" & Species != "Mixed" & Species != "Multiple")
-data_MultipleDefined <- data_MultipleDefined[grepl("[,.]", data_MultipleDefined$Species), ]
-
-data_MultipleUndefined <- data_Species %>% filter(Species == "Mixed" | Species == "Multiple")
-
-data_SpeciesUndefined <- data_Species %>% filter(Species == "")
-
-## Add a SpeciesSize column
-
-
-
-
-
-
-
-
-
-dat_SingleSpecies <- dat %>% filter(Species != "" & Species != "Mixed" & Species != "Multiple") # Remove the rows with no species reported.
-
-dat_SingleSpecies <- dat_SingleSpecies[!grepl(",", dat_SingleSpecies$Species), ]
-
-dat_SingleSpecies$Genus <- word(dat_SingleSpecies$Species, 1)
-
-dat_SingleSpecies <- dat_SingleSpecies[!grepl("spp", dat_SingleSpecies$Species), ]
-
-dat_SingleSpecies$Life_History <- ifelse(dat_SingleSpecies$Genus == "Posidonia" | dat_SingleSpecies$Genus == "Thalassia" | dat_SingleSpecies$Genus == "Enhalus" | dat_SingleSpecies$Genus == "Thalassodendron" | dat_SingleSpecies$Genus == "Amphibolis", "Large", "Small")
-
-View(dat_SingleSpecies %>% group_by(Species) %>% summarize(n = n()))
-View(dat_SingleSpecies %>% group_by(Genus) %>% summarize(n = n()))
-View(dat_SingleSpecies %>% group_by(Life_History) %>% summarize(n = n()))
-
+# By Bioregion
+head(data_Import[!grepl("[,.]", data_Import$Species), ] %>% filter(Species != "Multiple" & Species != "undefined" & Genus != "Multiple" & Hydrologic_Setting != "") %>% group_by(Bioregion) %>% summarize(n = n()))
 
 
 
@@ -79,11 +85,15 @@ View(dat_SingleSpecies %>% group_by(Life_History) %>% summarize(n = n()))
 
   ## Needed changes:
     # Add a "paper" column. Used for random effect.
-    # Add a "SpeciesSize" column. Used as a predictor later.
-    # Add a "SpeciesNumber" column. Used for easy filtering later in analysis. (NA = "NA", punctuation or "multiple" = "Multiple", else = "Single")
+    # Give "OMIT" value to each row that needs to be omitted.
+      # e.g. insufficient 
 
 
-
+## Add publication column for the random effect input.
+data_Export <- data_Import %>% 
+  group_by(Citation) %>% 
+  mutate(PAPER = cur_group_id()) %>% 
+  ungroup()
 
 
 
