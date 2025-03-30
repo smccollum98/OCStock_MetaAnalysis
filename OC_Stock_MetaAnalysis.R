@@ -9,8 +9,7 @@ library(dplyr)
 library(tidyr)
 library(brms)
 library(emmeans)
-
-
+library(writexl)
 
 
 #### IMPORTING DATA ####
@@ -23,6 +22,10 @@ data_Import <- data_Import %>%
   group_by(Citation) %>% 
   mutate(PAPER = cur_group_id()) %>% 
   ungroup()
+
+## Make missing error equal to "0"
+data_Import$SedCorgStockError_SE[is.na(data_Import$SedCorgStockError_SE)] <- "0"
+
 
 ## Verify that columns are the correct type
 data_Import <- data_Import %>% 
@@ -38,7 +41,8 @@ data_Import <- data_Import %>%
 
 ### GLOBAL ###
   ## Global
-global <- data_Import
+    ## global %>% filter(SedCorgStock_30cm_Mgha < 250) %>% ggplot(aes(SedCorgStock_30cm_Mgha))+geom_histogram()
+global <- data_Import %>% filter(SedCorgStock_30cm_Mgha < 1000)
 
 ## SPECIES AND SPECIES LIFE-HISTORY
   ## Global
@@ -51,14 +55,14 @@ species_global_all <- global[!grepl("\\.|,|spp", global$Species), ] %>%
       ## 3: Z. japonica
       ## 4: A. antarctica, Halodule ovalis
 species_global <- merge(species_global_all, species_global_all %>% group_by(Species) %>% summarize(n = n())) %>% 
-  filter(n >= 3) %>% 
+  filter(n >= 4) %>% 
   select(!n)
   ## Bioregional 
        ## Remove species with insufficient counts within a given bioregion.
-       ## View(species_global %>% group_by(Bioregion, Species) %>% summarize(n = n()))
-       ## View(species_bioregion %>% group_by(Bioregion, Species) %>% summarize(n = n()))
+        #View(species_global %>% group_by(Species) %>% summarize(n = n()))
+        #View(species_bioregion %>% group_by(Bioregion, Species) %>% summarize(n = n()))
 species_bioregion <- merge(species_global, species_global %>% group_by(Bioregion, Species) %>% summarize(n = n())) %>% 
-  filter(n >= 3) %>% 
+  filter(n >= 4) %>% 
   select(!n)
 
 ### LIFE-HISTORY ###
@@ -67,8 +71,8 @@ species_bioregion <- merge(species_global, species_global %>% group_by(Bioregion
 life_global <- global %>% filter(Life_History != "undefined" & Life_History != "multiple")
   ## Bioregional
       ## Remove bioregions with insufficient counts of life-histories.
-      ## lifehistory_global %>% group_by(Bioregion, Life_History) %>% summarize(n = n())
-      ## Lowest is colonizing in the Mediterranean which is sufficient.
+      ## life_global %>% group_by(Bioregion, Life_History) %>% summarize(n = n())
+      ## Lowest is colonizing in the Mediterranean (34) which is sufficient.
 life_bioregion <- life_global
 
 
@@ -78,7 +82,7 @@ life_bioregion <- life_global
 tidal_global <- global %>% filter(Tidal_Class != "")
   ## Bioregional ## Note: Remove bioregions with insufficient counts of either tidal class.
       ## tidal_global %>% group_by(Bioregion, Tidal_Class) %>% summarize(n = n())
-      ## Lowest is intertidal in Mediterranean, is this too low?
+      ## Lowest is intertidal in Mediterranean (6), which is sufficient (>= 4)
 tidal_bioregion <- tidal_global #%>% filter(Bioregion != "Mediterranean")
   
 ### HYDROLOGIC SETTING ###
@@ -88,8 +92,8 @@ hydrologic_global <- global %>%
   filter(Hydrologic_Setting != "")
   ## Bioregional 
       ## Remove bioregions with insufficient counts of either hydrologic setting.
-      ## hydrologic_global %>% group_by(Bioregion, Hydrologic_Setting) %>% summarize(n = n())
-      ## Lowest is estuarine in Mediterranean, is this too low?
+      hydrologic_global %>% group_by(Bioregion, Hydrologic_Setting) %>% summarize(n = n())
+      ## Lowest is estuarine in Mediterranean (8), which is sufficient (>= 4)
 hydrologic_bioregion <- hydrologic_global #%>% filter(Bioregion != "Mediterranean")
 
 
@@ -100,10 +104,10 @@ hydrologic_bioregion <- hydrologic_global #%>% filter(Bioregion != "Mediterranea
 life_tidal_global <- merge(life_global, tidal_global)
   ## Bioregional
       ## Remove bioregions with insufficient counts of a given combo of life-history and tidal class
-      ## life_tidal_bioregion %>% group_by(Bioregion, Life_History, Tidal_Class) %>% summarize(n = n())
+      life_tidal_bioregion %>% group_by(Bioregion, Life_History, Tidal_Class) %>% summarize(n = n())
       ## Temperate Southern Oceans (Persistent X Intertidal) has insufficient count (2)
           ## Do we drop that combo or the whole bioregion?
-life_tidal_bioregion <- merge(life_bioregion, tidal_bioregion)
+life_tidal_bioregion <- merge(life_bioregion, tidal_bioregion) %>% filter(Bioregion != "Temperate Southern Oceans")
 
 ### LIFE-HISTORY X HYDROLOGIC SETTING ###
   ## Global
@@ -111,7 +115,7 @@ life_hydrologic_global <- merge(life_global, hydrologic_global)
   ## Bioregional
       ## Remove bioregions with insufficient counts of a given combo of life-history and tidal class
       ## View(life_hydrologic_bioregion %>% group_by(Bioregion, Life_History, Hydrologic_Setting) %>% summarize(n = n()))
-      ## Fewest are Med X persistent X estuarine (4) and Med X colonizing X estuarine (4) - both sufficient
+      ## Fewest are Med X persistent X estuarine (4) and Med X colonizing X estuarine (4) - which are sufficient (>= 4)
 life_hydrologic_bioregion <- merge(life_bioregion, hydrologic_bioregion)
 
 ## TIDAL CLASS X HYDROLOGIC SETTING
@@ -121,7 +125,9 @@ tidal_hydrologic_global <- merge(tidal_global, hydrologic_global)
       ## Remove bioregions with insufficient counts of a given combo of tidal class and hydrologic setting
       ## View(tidal_hydrologic_bioregion %>% group_by(Bioregion, Tidal_Class, Hydrologic_Setting) %>% summarize(n = n()))
       ## Med X Int X C/E; Med X Sub X E; TNA X Int C; TSO X Int X C all 2 or less
-tidal_hydrologic_bioregion <- merge(tidal_bioregion, hydrologic_bioregion)
+tidal_hydrologic_bioregion <- merge(tidal_bioregion, hydrologic_bioregion) %>% filter(Bioregion != "Mediterranean", 
+                                                                                      Bioregion != "Temperate North Atlantic",
+                                                                                      Bioregion != "Temperate Southen Oceans")
 
 ## For hydrologic-tidal-species analysis
   ## Global
@@ -129,8 +135,11 @@ life_tidal_hydrologic_global <- merge(life_global, merge(tidal_global, hydrologi
   ## Bioregional
         ## Remove bioregions with insufficient counts of a given combo of life-history, tidal class and hydrologic setting
         ## View(life_tidal_hydrologic_bioregion %>% group_by(Bioregion, Life_History, Tidal_Class, Hydrologic_Setting) %>% summarize(n = n()))
-        ## list:
-life_tidal_hydrologic_bioregion <- merge(life_bioregion, merge(tidal_bioregion, hydrologic_bioregion))
+        ## list: MCIC (1); MCIE (2); MCSE (2); TNACIC (2); TSOPIC (2); TIPPSE (3)
+life_tidal_hydrologic_bioregion <- merge(life_bioregion, merge(tidal_bioregion, hydrologic_bioregion)) %>% filter(Bioregion != "Mediterranean",
+                                                                                                                  Bioregion != "Temperate North Atalantic",
+                                                                                                                  Bioregion != "Temperate Southern Oceans",
+                                                                                                                  Bioregion != "Tropical Indo-Pacific")
 
 #### END OF MAKING DATASETS ####
 
@@ -145,25 +154,669 @@ nullpriors<- c(prior(student_t(3, 30, 200), lb = 0, class = Intercept), ## prior
 
 #### End of establishing priors ####
 
+
+
+
 #### BUILDING MODELS ####
 
 ### Non-interactive between drivers ###
 
 ### Global ###
     ## Global
-mod_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Bioregion-1 + (1|PAPER),
+
+mod_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Bioregion-1 + (1|PAPER),
                      global,
                      prior = priors,
-                     iter = 1000, cores = 4,
+                     iter = 10000, cores = 4,
                      family = gaussian(link = "identity"),
                      save_pars = save_pars(all=TRUE)) ## Diagnostics clear
 
+mod_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                    global,
+                    prior = nullpriors,
+                    iter = 10000, cores = 4,
+                    family = gaussian(link = "identity"),
+                    save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+brms::fixef(mod_global_null, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_global)
+
+## Probability of model significance
+post_prob(mod_global, mod_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_global, "Bioregion", point.est = median, mode = "hdi"))
+
+#### ####
+
+### Species ###
+
+mod_species_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE)  ~  (Species-1) + (1|PAPER),
+                   species_global,
+                   prior = priors,
+                   iter = 100000, cores = 4,
+                   family = gaussian(link = "identity"),
+                   control = list(adapt_delta = .99),
+                   save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_species_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE)  ~  1 + (1|PAPER),
+                          species_global,
+                          prior = nullpriors,
+                          iter = 100000, cores = 4,
+                          family = gaussian(link = "identity"),
+                          control = list(adapt_delta = .99),
+                          save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_species_global, summary = TRUE, robust = FALSE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_species_global)
+
+## Probability of model significance
+post_prob(mod_species_global, mod_species_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_species_global, "Species", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_species_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  (Bioregion:Species)-1 + (1|PAPER),
+                               species_bioregion,
+                               prior = priors,
+                               iter = 100000, cores = 4,
+                               family = gaussian(link = "identity"),
+                               control = list(adapt_delta = .99),
+                               save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_species_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  1 + (1|PAPER),
+                             species_bioregion,
+                             prior = nullpriors,
+                             iter = 100000, cores = 4,
+                             family = gaussian(link = "identity"),
+                             control = list(adapt_delta = .99),
+                             save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_species_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_species_bioregion)
+
+## Probability of model significance
+post_prob(mod_species_bioregion, mod_species_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_species_bioregion, "Species", point.est = median, mode = "hdi"))
+
+#### ####
 
 
+### Life-History ###
+
+mod_life_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Life_History-1 + (1|PAPER),
+                       life_global,
+                       prior = priors,
+                       iter = 100000, cores = 4,
+                       family = gaussian(link = "identity"),
+                       control = list(adapt_delta = .99),
+                       save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                       life_global,
+                       prior = nullpriors,
+                       iter = 100000, cores = 4,
+                       family = gaussian(link = "identity"),
+                       control = list(adapt_delta = .99),
+                       save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_global)
+
+## Probability of model significance
+post_prob(mod_life_global, mod_life_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_global, "Life-History", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_life_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  (Bioregion:Life_History)-1 + (1|PAPER),
+                       life_bioregion,
+                       prior = priors,
+                       iter = 100000, cores = 4,
+                       family = gaussian(link = "identity"),
+                       control = list(adapt_delta = .99),
+                       save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  1 + (1|PAPER),
+                       life_bioregion,
+                       prior = nullpriors,
+                       iter = 100000, cores = 4,
+                       family = gaussian(link = "identity"),
+                       control = list(adapt_delta = .99),
+                       save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_bioregion)
+
+## Probability of model significance
+post_prob(mod_life_bioregion, mod_life_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_bioregion, "Life_History", point.est = median, mode = "hdi"))
+
+#### ####
+
+### Tidal Class ###
+
+mod_tidal_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Tidal_Class-1 + (1|PAPER),
+                         tidal_global,
+                         prior = priors,
+                         iter = 100000, cores = 4,
+                         family = gaussian(link = "identity"),
+                         control = list(adapt_delta = .99),
+                         save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_tidal_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                         tidal_global,
+                         prior = nullpriors,
+                         iter = 100000, cores = 4,
+                         family = gaussian(link = "identity"),
+                         control = list(adapt_delta = .99),
+                         save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_tidal_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_tidal_global)
+
+## Probability of model significance
+post_prob(mod_tidal_global, mod_tidal_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_tidal_global, "Tidal_Class", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_tidal_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ (Bioregion:Tidal_Class)-1 + (1|PAPER),
+                         tidal_bioregion,
+                         prior = priors,
+                         iter = 100000, cores = 4,
+                         family = gaussian(link = "identity"),
+                         control = list(adapt_delta = .99),
+                         save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_tidal_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                           tidal_bioregion,
+                           prior = nullpriors,
+                           iter = 100000, cores = 4,
+                           family = gaussian(link = "identity"),
+                           control = list(adapt_delta = .99),
+                           save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_tidal_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_tidal_bioregion)
+
+## Probability of model significance
+post_prob(mod_tidal_bioregion, mod_tidal_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_tidal_bioregion, "Tidal_Class", point.est = median, mode = "hdi"))
+
+#### ####
+
+### Hydrologic Setting ### 
+
+mod_hydrologic_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ (Hydrologic_Setting-1) + (1|PAPER),
+                   hydrologic_global,
+                   prior = priors,
+                   iter = 100000, cores = 4,
+                   family =  gaussian(link = "identity"),
+                   control = list(adapt_delta = .99),
+                   save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_hydrologic_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                  hydrologic_global,
+                  prior = nullpriors,
+                  iter = 100000, cores = 4,
+                  family =  gaussian(link = "identity"),
+                  control = list(adapt_delta = .99),
+                  save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_hydrologic_global)
+
+## Probability of model significance
+post_prob(mod_hydrologic_global, mod_hydrologic_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_hydrologic_global, "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_hydrologic_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Bioregion:Hydrologic_Setting)-1) + (1|PAPER),
+                 hydrologic_bioregion,
+                 prior = priors,
+                 iter = 100000, cores = 4,
+                 family =  gaussian(link = "identity"),
+                 control = list(adapt_delta = .99),
+                 save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_hydrologic_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                hydrologic_bioregion,
+                prior = nullpriors,
+                iter = 100000, cores = 4,
+                family =  gaussian(link = "identity"),
+                control = list(adapt_delta = .99),
+                save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_hydrologic_bioregion)
+
+## Probability of model significance
+post_prob(mod_hydrologic_bioregion, mod_hydrologic_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_hydrologic_bioregion, "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+### ### ###
+
+### Interactive between drivers ###
 
 
+### Life History X Tidal Class ###
+
+mod_life_tidal_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Life_History:Tidal_Class)-1) + (1|PAPER),
+                                life_tidal_global,
+                                prior = priors,
+                                iter = 100000, cores = 4,
+                                family =  gaussian(link = "identity"),
+                                control = list(adapt_delta = .99),
+                                save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_tidal_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                     life_tidal_global,
+                                     prior = nullpriors,
+                                     iter = 100000, cores = 4,
+                                     family =  gaussian(link = "identity"),
+                                     control = list(adapt_delta = .99),
+                                     save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_tidal_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_tidal_global)
+
+## Probability of model significance
+post_prob(mod_life_tidal_global, mod_life_tidal_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_tidal_global, "Life_History", "Tidal_Class", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_life_tidal_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Bioregion:Life_History:Tidal_Class)-1) + (1|PAPER),
+                             life_tidal_bioregion,
+                             prior = priors,
+                             iter = 100000, cores = 4,
+                             family =  gaussian(link = "identity"),
+                             control = list(adapt_delta = .99),
+                             save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_tidal_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                  life_tidal_bioregion,
+                                  prior = nullpriors,
+                                  iter = 100000, cores = 4,
+                                  family =  gaussian(link = "identity"),
+                                  control = list(adapt_delta = .99),
+                                  save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_tidal_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_tidal_bioregion)
+
+## Probability of model significance
+post_prob(mod_life_tidal_bioregion, mod_life_tidal_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_tidal_bioregion, "Bioregion", "Life_History", "Tidal_Class", point.est = median, mode = "hdi"))
+
+#### ####
 
 
+### Life History X Hydrologic Setting ###
+
+mod_life_hydrologic_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Life_History:Hydrologic_Setting)-1) + (1|PAPER),
+                             life_hydrologic_global,
+                             prior = priors,
+                             iter = 100000, cores = 4,
+                             family =  gaussian(link = "identity"),
+                             control = list(adapt_delta = .99),
+                             save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_hydrologic_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                  life_hydrologic_global,
+                                  prior = nullpriors,
+                                  iter = 100000, cores = 4,
+                                  family =  gaussian(link = "identity"),
+                                  control = list(adapt_delta = .99),
+                                  save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_hydrologic_global)
+
+## Probability of model significance
+post_prob(mod_life_hydrologic_global, mod_life_hydrologic_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_hydrologic_global, "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_life_hydrologic_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Bioregion:Life_History:Hydrologic_Setting)-1) + (1|PAPER),
+                                life_hydrologic_bioregion,
+                                prior = priors,
+                                iter = 100000, cores = 4,
+                                family =  gaussian(link = "identity"),
+                                control = list(adapt_delta = .99),
+                                save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_hydrologic_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                     life_hydrologic_bioregion,
+                                     prior = nullpriors,
+                                     iter = 100000, cores = 4,
+                                     family =  gaussian(link = "identity"),
+                                     control = list(adapt_delta = .99),
+                                     save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_hydrologic_bioregion)
+
+## Probability of model significance
+post_prob(mod_life_hydrologic_bioregion, mod_life_hydrologic_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_hydrologic_bioregion, "Bioregion", "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+
+### Tidal Class X Hydrologic Setting ###
+
+mod_tidal_hydrologic_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Tidal_Class:Hydrologic_Setting)-1) + (1|PAPER),
+                                   tidal_hydrologic_global,
+                                  prior = priors,
+                                  iter = 100000, cores = 4,
+                                  family =  gaussian(link = "identity"),
+                                  control = list(adapt_delta = .99),
+                                  save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_tidal_hydrologic_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                        tidal_hydrologic_global,
+                                       prior = nullpriors,
+                                       iter = 100000, cores = 4,
+                                       family =  gaussian(link = "identity"),
+                                       control = list(adapt_delta = .99),
+                                       save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_tidal_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_tidal_hydrologic_global)
+
+## Probability of model significance
+post_prob(mod_tidal_hydrologic_global, mod_life_hydrologic_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_tidal_hydrologic_global, "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_tidal_hydrologic_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Bioregion:Tidal_Class:Hydrologic_Setting)-1) + (1|PAPER),
+                                     tidal_hydrologic_bioregion,
+                                     prior = priors,
+                                     iter = 100000, cores = 4,
+                                     family =  gaussian(link = "identity"),
+                                     control = list(adapt_delta = .99),
+                                     save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_tidal_hydrologic_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                          tidal_hydrologic_bioregion,
+                                          prior = nullpriors,
+                                          iter = 100000, cores = 4,
+                                          family =  gaussian(link = "identity"),
+                                          control = list(adapt_delta = .99),
+                                          save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_tidal_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_tidal_hydrologic_bioregion)
+
+## Probability of model significance
+post_prob(mod_tidal_hydrologic_bioregion, mod_tidal_hydrologic_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_tidal_hydrologic_bioregion, "Bioregion", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+
+### Life History X Tidal Class X Hydrologic Setting ###
+
+mod_life_tidal_hydrologic_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Life_History:Tidal_Class:Hydrologic_Setting)-1) + (1|PAPER),
+                                   tidal_hydrologic_global,
+                                   prior = priors,
+                                   iter = 100000, cores = 4,
+                                   family =  gaussian(link = "identity"),
+                                   control = list(adapt_delta = .99),
+                                   save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_tidal_hydrologic_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                        tidal_hydrologic_global,
+                                        prior = nullpriors,
+                                        iter = 100000, cores = 4,
+                                        family =  gaussian(link = "identity"),
+                                        control = list(adapt_delta = .99),
+                                        save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_tidal_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_tidal_hydrologic_global)
+
+## Probability of model significance
+post_prob(mod_life_tidal_hydrologic_global, mod_life_hydrologic_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_tidal_hydrologic_global, "Life_History", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_life_tidal_hydrologic_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ ((Bioregion:Life_History:Tidal_Class:Hydrologic_Setting)-1) + (1|PAPER),
+                                      tidal_hydrologic_bioregion,
+                                      prior = priors,
+                                      iter = 100000, cores = 4,
+                                      family =  gaussian(link = "identity"),
+                                      control = list(adapt_delta = .99),
+                                      save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_tidal_hydrologic_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                                           tidal_hydrologic_bioregion,
+                                           prior = nullpriors,
+                                           iter = 100000, cores = 4,
+                                           family =  gaussian(link = "identity"),
+                                           control = list(adapt_delta = .99),
+                                           save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_tidal_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_tidal_hydrologic_bioregion)
+
+## Probability of model significance
+post_prob(mod_life_tidal_hydrologic_bioregion, mod_tidal_hydrologic_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_tidal_hydrologic_bioregion, "Bioregion", "Life_History", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))
+
+#### ####
+
+
+#### ANALYSIS OUTPUT ####
+
+### Export Monte-Carlo Standard Error (MCSE) ###
+
+write.xlsx(as.data.frame(mcse(mod_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Bioregions")
+write.xlsx(as.data.frame(mcse(mod_global_null)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_species_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Species_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_species_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Species_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistory_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistory_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_tidal_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "TidalClass_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_tidal_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "TidalClass_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_hydrologic_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "HydrologicSetting_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_hydrologic_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "HydrologicSetting_Bioregions", append = TRUE)
+
+write.xlsx(as.data.frame(mcse(mod_life_tidal_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistoryxTidalClass_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_tidal_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistoryxTidalClass_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_hydrologic_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistoryxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_hydrologic_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistoryxHydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_tidal_hydrologic_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "TidalClassxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_tidal_hydrologic_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "TidalClassxHydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_tidal_hydrologic_global)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifexTidalClassxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(mcse(mod_life_tidal_hydrologic_bioregion)), file = here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifexTidalClassxHydrologic_Bioregion", append = TRUE)
+
+#### #### ####
+
+### Export fixef parameter estimates ###
+
+write.xlsx(as.data.frame(brms::fixef(mod_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Bioregions")
+write.xlsx(as.data.frame(brms::fixef(mod_global_null, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_species_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Species_Global", append = TRUE),
+write.xlsx(as.data.frame(brms::fixef(mod_species_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Species_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistory_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistory_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_tidal_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "TidalClass_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_tidal_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "TidalClass_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "HydrologicSetting_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "HydrologicSetting_Bioregion", append = TRUE)
+
+write.xlsx(as.data.frame(brms::fixef(mod_life_tidal_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistoryxTidal_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_tidal_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistoryxTidal_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistoryxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistoryxHydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_tidal_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "TidalxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_tidal_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "TidalxHydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_tidal_hydrologic_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistoryxTidalxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(brms::fixef(mod_life_tidal_hydrologic_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))), 
+           file = here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistoryxTidalxHydrologic_Bioregion", append = TRUE)
+
+#### #### ####
+
+### Export Emmeans pairs ###
+
+write.xlsx(as.data.frame(pairs(emmeans(mod_global, "Bioregion", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Bioregions")
+write.xlsx(as.data.frame(pairs(emmeans(mod_species_global, "Species", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Species_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_species_bioregion, "Bioregion", "Species", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Species_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_global, "Life_History", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistory_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_bioregion, "Bioregion", "Life_History", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistory_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_tidal_global, "Tidal_Class", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "TidalClass_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_tidal_bioregion, "Bioregion", "Tidal_Class", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "TidalClass_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_hydrologic_global, "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Hydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_hydrologic_bioregion, "Bioregion", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Hydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_global, "Life_History", "Tidal_Class", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxTidal_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_bioregion, "Bioregion", "Life_History", "Tidal_Class", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxTidal_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_hydrologic_global, "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_hydrologic_bioregion, "Bioregion", "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxHydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_tidal_hydrologic_global, "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "TidalxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_tidal_hydrologic_bioregion, "Bioregion", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "TidalxHydrologic_Bioregion", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_hydrologic_global, "Life_History", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifexTidalxHydrologic_Global", append = TRUE)
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_hydrologic_bioregion, "Bioregion", "Life_History", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+           file = here("Outputs", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifexTidalxHydrologic_Bioregion", append = TRUE)
+
+#### #### ####
+
+# mcse_global <- as.data.frame(mcse(mod_global_null))
+# mcse_global <- as.data.frame(mcse(mod_species_global))
+# mcse_global <- as.data.frame(mcse(mod_species_bioregion))
+# mcse_global <- as.data.frame(mcse(mod_life_global))
+# mcse_global <- as.data.frame(mcse(mod_life_bioregion))
+# mcse_global <- as.data.frame(mcse(mod_tidal_global))
+# mcse_global <- as.data.frame(mcse(mod_tidal_bioregion))
+# mcse_global <- as.data.frame(mcse(mod_hydrologic_global))
+# mcse_global <- as.data.frame(mcse(mod_hydrologic_bioregion))
+# mcse_global <- as.data.frame(mcse(mod_hydrologic_global))
+# mcse_global <- as.data.frame(mcse(mod_hydrologic_bioregion))
 
 
 
