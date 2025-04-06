@@ -44,7 +44,7 @@ data_Import <- data_Import %>%
     ## global %>% filter(SedCorgStock_30cm_Mgha < 250) %>% ggplot(aes(SedCorgStock_30cm_Mgha))+geom_histogram()
 global <- data_Import %>% filter(SedCorgStock_30cm_Mgha < 1000)
 
-## SPECIES AND SPECIES LIFE-HISTORY
+## SPECIES ###
   ## Global
       ## Remove undefined and reports from meadows with multiple species.
 species_global_all <- global[!grepl("\\.|,|spp", global$Species), ] %>% 
@@ -65,6 +65,12 @@ species_bioregion <- merge(species_global, species_global %>% group_by(Bioregion
   filter(n >= 4) %>% 
   select(!n)
 
+### SPECIES EXCLUDING P. OCEANICA ###
+
+species_no_oceanica_global <- species_global %>% filter(Species != "Posidonia oceanica")
+
+species_no_oceanica_bioregion <- species_bioregion %>% filter(Species != "Posidonia oceanica")
+
 ### LIFE-HISTORY ###
   ## Global
       ## Remove undefined and reports from meadows with multiple life-histories.
@@ -77,6 +83,13 @@ life_bioregion <- life_global %>%
   filter(Bioregion != "Temperate North Pacific",
          Bioregion != "Temperate North Atlantic")
 
+### LIFE-HISTORY EXCLUDING P. OCEANICA ###
+
+life_no_oceanica_global <- life_global %>% filter(Species != "Posidonia oceanica") %>% 
+  filter(Bioregion != "Mediterranean")
+
+life_no_oceanica_bioregion <- life_bioregion %>% filter(Species != "Posidonia oceanica") %>% 
+  filter(Bioregion != "Mediterranean")
 
 ### TIDAL CLASS ###
   ## Global
@@ -94,7 +107,7 @@ hydrologic_global <- global %>%
   filter(Hydrologic_Setting != "")
   ## Bioregional 
       ## Remove bioregions with insufficient counts of either hydrologic setting.
-      # hydrologic_global %>% group_by(Bioregion, Hydrologic_Setting) %>% summarize(n = n())
+       # hydrologic_global %>% group_by(Bioregion, Hydrologic_Setting) %>% summarize(n = n())
       ## Lowest is estuarine in Mediterranean (8), which is sufficient (>= 4)
 hydrologic_bioregion <- hydrologic_global
 
@@ -258,6 +271,70 @@ pairs(emmeans(mod_species_bioregion, "Species", point.est = median, mode = "hdi"
 #### ####
 
 
+
+### Species - No P. oceanica ###
+
+mod_species_no_oceanica_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE)  ~  (Species-1) + (1|PAPER),
+                          species_no_oceanica_global,
+                          prior = priors,
+                          iter = 10000, cores = 4,
+                          family = gaussian(link = "identity"),
+                          control = list(adapt_delta = .99),
+                          save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_species_no_oceanica_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE)  ~  1 + (1|PAPER),
+                               species_no_oceanica_global,
+                               prior = nullpriors,
+                               iter = 10000, cores = 4,
+                               family = gaussian(link = "identity"),
+                               control = list(adapt_delta = .99),
+                               save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_species_no_oceanica_global, summary = TRUE, robust = FALSE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_species_no_oceanica_global)
+
+## Probability of model significance
+post_prob(mod_species_no_oceanica_global, mod_species_no_oceanica_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_species_no_oceanica_global, "Species", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_species_no_oceanica_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  (Bioregion:Species)-1 + (1|PAPER),
+                             species_no_oceanica_bioregion,
+                             prior = priors,
+                             iter = 10000, cores = 4,
+                             family = gaussian(link = "identity"),
+                             control = list(adapt_delta = .99),
+                             save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_species_no_oceanica_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  1 + (1|PAPER),
+                              species_no_oceanica_bioregion,
+                              prior = nullpriors,
+                              iter = 10000, cores = 4,
+                              family = gaussian(link = "identity"),
+                              control = list(adapt_delta = .99),
+                              save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_species_no_oceanica_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_species_no_oceanica_bioregion)
+
+## Probability of model significance
+post_prob(mod_species_no_oceanica_bioregion, mod_species_no_oceanica_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_species_no_oceanica_bioregion, "Species", point.est = median, mode = "hdi"))
+
+#### ####
+
+
 ### Life-History ###
 
 mod_life_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Life_History-1 + (1|PAPER),
@@ -320,9 +397,72 @@ pairs(emmeans(mod_life_bioregion, "Life_History","Bioregion",  point.est = media
 
 #### ####
 
+### LIFE-HISTORY EXCLUDING P. OCEANICA ###
+
+mod_life_no_oceanica_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Life_History-1 + (1|PAPER),
+                       life_no_oceanica_global,
+                       prior = priors,
+                       iter = 10000, cores = 4,
+                       family = gaussian(link = "identity"),
+                       control = list(adapt_delta = .99),
+                       save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_no_oceanica_global_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ 1 + (1|PAPER),
+                            life_no_oceanica_global,
+                            prior = nullpriors,
+                            iter = 10000, cores = 4,
+                            family = gaussian(link = "identity"),
+                            control = list(adapt_delta = .99),
+                            save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_no_oceanica_global, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_no_oceanica_global)
+
+## Probability of model significance
+post_prob(mod_life_no_oceanica_global, mod_life_no_oceanica_global_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_no_oceanica_global, "Life-History", point.est = median, mode = "hdi"))
+
+#### ####
+
+mod_life_no_oceanica_bioregion <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  (Bioregion:Life_History)-1 + (1|PAPER),
+                          life_no_oceanica_bioregion,
+                          prior = priors,
+                          iter = 10000, cores = 4,
+                          family = gaussian(link = "identity"),
+                          control = list(adapt_delta = .99),
+                          save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+mod_life_no_oceanica_bioregion_null <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~  1 + (1|PAPER),
+                               life_no_oceanica_bioregion,
+                               prior = nullpriors,
+                               iter = 10000, cores = 4,
+                               family = gaussian(link = "identity"),
+                               control = list(adapt_delta = .99),
+                               save_pars = save_pars(all=TRUE)) ## Diagnostics clear
+
+## Extract population-level effects. robust = TRUE gives the median as the measure of central tendency.
+brms::fixef(mod_life_no_oceanica_bioregion, summary = TRUE, robust = TRUE, probs = c(0.025, 0.975, 0.05, 0.95, 0.1, 0.9))
+
+## Monte-Carlo Standard Error for each estimate
+mcse(mod_life_no_oceanica_bioregion)
+
+## Probability of model significance
+post_prob(mod_life_no_oceanica_bioregion, mod_life_no_oceanica_bioregion_null)
+
+## Estimated Marginal Mean difference between each Bioregion pair
+pairs(emmeans(mod_life_no_oceanica_bioregion, "Life_History","Bioregion",  point.est = median, mode = "hdi"))
+
+#### ####
+
+
 ### Tidal Class ###
 
-mod_tidal_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ Tidal_Class-1 + (1|PAPER),
+mod_tidal_global <- brm(SedCorgStock_30cm_Mgha | se(SedCorgStockError_SE, sigma = TRUE) ~ (Tidal_Class-1) + (1|PAPER),
                          tidal_global,
                          prior = priors,
                          iter = 10000, cores = 4,
@@ -752,12 +892,14 @@ write.xlsx(as.data.frame(pairs(emmeans(mod_hydrologic_global, "Hydrologic_Settin
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Hydrologic_Global", append = TRUE)
 write.xlsx(as.data.frame(pairs(emmeans(mod_hydrologic_bioregion, "Hydrologic_Setting", "Bioregion", point.est = median, mode = "hdi"))), 
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Hydrologic_Bioregion", append = TRUE)
-write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_global, "Life_History", "Tidal_Class", point.est = median, mode = "hdi"))), 
+#*
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_global, "Tidal_Class", "Life_History", point.est = median, mode = "hdi"))), 
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxTidal_Global", append = TRUE)
 write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_bioregion,"Bioregion", "Life_History", "Tidal_Class", point.est = median, mode = "hdi"))), 
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxTidal_Bioregion", append = TRUE)
 
-write.xlsx(as.data.frame(pairs(emmeans(mod_life_hydrologic_global, "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
+#*
+write.xlsx(as.data.frame(pairs(emmeans(mod_life_hydrologic_global, "Hydrologic_Setting", "Life_History", point.est = median, mode = "hdi"))), 
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxHydrologic_Global", append = TRUE)
 write.xlsx(as.data.frame(pairs(emmeans(mod_life_hydrologic_bioregion, "Bioregion", "Life_History", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxHydrologic_Bioregion", append = TRUE)
@@ -769,6 +911,18 @@ write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_hydrologic_global, "Life_H
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifexTidalxHydrologic_Global", append = TRUE)
 write.xlsx(as.data.frame(pairs(emmeans(mod_life_tidal_hydrologic_bioregion, "Bioregion", "Life_History", "Tidal_Class", "Hydrologic_Setting", point.est = median, mode = "hdi"))), 
            file = here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifexTidalxHydrologic_Bioregion", append = TRUE)
+
+
+
+
+
+
+
+pairs(emmeans(mod_life_hydrologic_bioregion, ~ Life_History * Hydrologic_Setting), simple = "each")
+
+pairs(emmeans(mod_life_hydrologic_global, ~ Hydrologic_Setting * Life_History), simple = "each")
+
+pairs(emmeans(mod_life_tidal_bioregion, ~ Tidal_Class * Life_History), simple = "each")
 
 #### #### ####
 
@@ -830,7 +984,7 @@ write.xlsx(as.data.frame(post_prob(mod_tidal_global, mod_tidal_global_null)), he
 write.xlsx(as.data.frame(post_prob(mod_tidal_bioregion, mod_tidal_bioregion_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
            sheetName = "Tidal_Bioregion", append = TRUE)
 write.xlsx(as.data.frame(post_prob(mod_hydrologic_global, mod_hydrologic_global_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
-           sheetName = "Hydrlogic_Global", append = TRUE)
+           sheetName = "Hydrologic_Global", append = TRUE)
 write.xlsx(as.data.frame(post_prob(mod_hydrologic_bioregion, mod_hydrologic_bioregion_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
            sheetName = "Hydrologic_Bioregion", append = TRUE)
 
@@ -839,7 +993,7 @@ write.xlsx(as.data.frame(post_prob(mod_life_tidal_global, mod_life_tidal_global_
 write.xlsx(as.data.frame(post_prob(mod_life_tidal_bioregion, mod_life_tidal_bioregion_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
            sheetName = "LifeHistory_Tidal_Bioregion", append = TRUE)
 
-write.xlsx(as.data.frame(post_prob(mod_life_hydrologic_global, mod_life_tidal_global_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
+write.xlsx(as.data.frame(post_prob(mod_life_hydrologic_global, mod_life_hydrologic_global_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
            sheetName = "LifeHistory_Hydrologic_Global", append = TRUE)
 write.xlsx(as.data.frame(post_prob(mod_life_hydrologic_bioregion, mod_life_hydrologic_bioregion_null)), here("Output", "BayesianAnalysis", "PosteriorProbability", "PosteriorProbability.xlsx"), 
            sheetName = "LifeHistory_Hydrologic_Bioregion", append = TRUE)

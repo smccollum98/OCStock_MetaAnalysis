@@ -1,368 +1,312 @@
 
-
-#### This code modifies and collates the datasets exported from the analysis ####
-#### This process gives us more readable tables and is easier to make into figures. ####
-
-### Libraries
+### Load Libraries ###
 
 library(dplyr)
-library(stringr)
-
-###
-
-
-
-#### Dataset of the OC storage globally and in each bioregion ####
-
-global_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Global") %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = "Global")
-global_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Global") %>%
-  select(!NA.) %>% 
-  mutate(Parameter = "Global")
-global_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "Global") %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = "Global")
-
-global_data <- merge(global_coef, merge(global_mcse, global_count))
-
-bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Bioregions") %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = c("Mediterranean", "Temperate North Atlantic", 
-                       "Temperate North Pacific", "Temperate Southern Oceans", 
-                       "Tropical Atlantic", "Tropical Indo-Pacific"))
-bioregion_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Bioregions") %>%
-  select(!NA.) %>% 
-  mutate(Parameter = c("Mediterranean", "Temperate North Atlantic", 
-                       "Temperate North Pacific", "Temperate Southern Oceans", 
-                       "Tropical Atlantic", "Tropical Indo-Pacific"))
-bioregion_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "Bioregions") %>% 
-  select(!Bioregion) %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = c("Mediterranean", "Temperate North Atlantic", 
-                       "Temperate North Pacific", "Temperate Southern Oceans", 
-                       "Tropical Atlantic", "Tropical Indo-Pacific"))
-
-bioregion_data <- merge(bioregion_coef, merge(bioregion_mcse, bioregion_count))
-
-global_bioregion_data <- rbind(global_data, bioregion_data)
-
-write.xlsx(global_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Global_Bioregion")
-
-#### #### ####
-
-#### Species ####
-
-species_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Species_Global") %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Species", repl = ""))
-
-species_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Species_Global") %>%
-  select(!NA.) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "b_Species", repl = ""))
-
-species_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "Species_Global") %>% 
-  select(!NA.) %>% 
-  rename(Parameter = Species) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = " ", repl = ""))
-
-species_data <- merge(species_coef, merge(species_mcse, species_count)) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Amphibolis", repl = "Amphibolis ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Cymodocea", repl = "Cymodocea ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Enhalus", repl = "Enhalus ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Halodule", repl = "Halodule ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Halophila", repl = "Halophila ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Posidonia", repl = "Posidonia ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Syringodium", repl = "Syringodium ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Thalassia", repl = "Thalassia ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Thalassodendron", repl = "Thalassodendron ")) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Zostera", repl = "Zostera "))
-
-write.xlsx(species_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Species_Global", append = TRUE)
-
-#### #### ####
+library(ggplot2)
+library(shadowtext)
+
+#### ####
+
+
+### Set gg_options ###
+
+gg_options <- function()  theme_bw()+theme(
+  panel.grid=element_blank(),
+  panel.background = element_rect(fill = "transparent", colour = NA),
+  plot.background = element_rect(fill = "transparent", colour = NA),
+  legend.background= element_blank(),
+  legend.box.background=element_blank(),
+  legend.key= element_blank(),
+  strip.background= element_blank())
+
+#### ####
+
+### Loading the datasets ###
+
+## Estimates
+bioregion <- read.xlsx(here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Global_Bioregion")
+species_bioregion <- read.xlsx(here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Species_Bioregion")
+
+## Pair-wise
+life_history <- read.xlsx(here("Output", "Tables", "Pairwise.xlsx"), sheetName = "LifeHistory")
+tidal_class <- read.xlsx(here("Output", "Tables", "Pairwise.xlsx"), sheetName = "TidalClass")
+hydrologic_setting <- read.xlsx(here("Output", "Tables", "Pairwise.xlsx"), sheetName = "HydrologicSetting")
+
+#### CREATING THE FIGURES ####
+
+
+### Bioregion Sediment OC Stock Estimate ###
+
+bioregion_figure <- bioregion %>% 
+  filter(Parameter != "Global") %>%
+  ggplot(mapping = aes(x = reorder(Parameter, -Estimate, na.rm = TRUE),
+                       Estimate))+
+  geom_hline(aes(yintercept = 34.7), linetype = 6, alpha = .6)+
+  geom_hline(aes(yintercept = 0))+
+  geom_hline(aes(yintercept = 30), alpha = .1)+
+  geom_hline(aes(yintercept = 60), alpha = .1)+
+  geom_hline(aes(yintercept = 90), alpha = .1)+
+  geom_errorbar(aes(ymin = Q10, 
+                    ymax = Q90), 
+                size = 3.5, width = 0, alpha = 1, col = "#4C5B5C",
+                position = position_dodge(width = .65))+
+  geom_errorbar(aes(ymin = Q5, 
+                    ymax = Q95), 
+                size = 2.5, width = 0, alpha = .7, col = "#4C5B5C",
+                position = position_dodge(width = .65))+
+  geom_errorbar(aes(ymin = Q2.5, 
+                    ymax = Q97.5), 
+                size = 1.5, width = 0, alpha = .5, col = "#4C5B5C",
+                position = position_dodge(width = .65))+
+  geom_point(aes(), 
+             size = 3, 
+             position = position_dodge(width = .65))+
+  # geom_text(aes(x = Bioregion, y = mean, label = paste("n = ", N)), size = 5, nudge_x = -.15, angle = 90, color = 'black')+
+  # geom_text(aes(x = Bioregion, y = hdi5-3, label = paste("n = ", N)))+
+  geom_text(aes(x = Parameter, y = Q95+6, label = sig), size = 4)+ # label = sig
+  geom_shadowtext(aes(x = Parameter, y = Q95+11,  label =  n), size = 3.5, col = "black", bg.color = "white")+
+  # geom_shadowtext(aes(x = Bioregion, y = hdi95+15,  label = cores), size = 3.5, col = "black", bg.color = "white")+
+  gg_options()+
+  ylab(expression(paste("Sediment OC Stock (Mg ", ha^{-1}, ")")))+
+  xlab("Bioregion")+
+  theme(axis.title = element_text(size = 23))+
+  theme(axis.text = element_text(size = 12))+
+  theme(legend.text = element_text(size = 16))+
+  theme(legend.title = element_text(size = 18))+
+  theme(axis.title.y = element_text(vjust = 1.2))+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+  theme(legend.position = "none")+
+  theme(axis.title.x = element_blank())
+
+bioregion_figure
+
+png(here("Output", "Figures", "Bioregion_Sediment_OC_Stock.png"),
+    units = "in",
+    res = 1200,
+    height = 6,
+    width = 8)
+
+bioregion_figure
+
+dev.off()
+
+#### ####
+
+### Species x Bioregion Sediment OC Stock Figure
+
+
+species_bioregion_figure <- ggplot(species_bioregion, mapping = aes(x = reorder(species_bioregion$Species, -Estimate, na.rm = TRUE),
+                                                         Estimate, fill = Bioregion))+
+  geom_errorbar(aes(ymin = Q10, 
+                    ymax = Q90,
+                    col = Bioregion), 
+                size = 3.5, width = 0, alpha = 1,
+                position = position_dodge(width = .8))+
+  geom_errorbar(aes(ymin = Q5, 
+                    ymax = Q95,
+                    col = Bioregion), 
+                size = 2.5, width = 0, alpha = .7,
+                position = position_dodge(width = .8))+
+  geom_errorbar(aes(ymin = Q2.5, 
+                    ymax = Q97.5,
+                    col = Bioregion), 
+                size = 1.5, width = 0, alpha = .5,
+                position = position_dodge(width = .8))+
+  geom_point(aes(), 
+             size = 3, 
+             position = position_dodge(width = .8))+
+  # geom_text(aes(y = Q97.5+7.5, label = sig), size = 4.5,
+  #           position = position_dodge(width = .8))+
+  geom_text(aes(y = Q97.5+12, label = n), size = 3.5,
+            position = position_dodge(width = .8))+
+  gg_options()+
+  geom_hline(aes(yintercept = 0))+
+  geom_hline(aes(yintercept = 50), alpha = .1)+
+  geom_hline(aes(yintercept = 100), alpha = .1)+
+  geom_hline(aes(yintercept = 150), alpha = .1)+
+  ylab(expression(paste("Sediment OC Stock (Mg ", ha^{-1}, ")")))+
+  theme(axis.title = element_text(size = 23))+
+  theme(axis.text = element_text(size = 12))+
+  theme(legend.text = element_text(size = 16))+
+  theme(legend.title = element_text(size = 18))+
+  theme(axis.title.y = element_text(vjust = 1.2))+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+  theme(legend.position = "none")+
+  theme(axis.title.x = element_blank())+
+  scale_color_manual(values = c("#586994", 
+                                "#D33F49", 
+                                "#F0A202", 
+                                "#BFCC94", 
+                                "#FF8360", 
+                                "#E0ACD5"))
+
+species_bioregion_figure
+
+
+
+png(here("Output", "Figures", "Species_Sediment_OC_Stock.png"),
+    width = 16,
+    height = 8,
+    units = "in",
+    res = 1200)
+
+species_bioregion_figure
+
+dev.off()
+
+#### ####
+
+### Life-History Figure ### 
+
+life_history_figure <- life_history %>% 
+  ggplot() +
+  geom_point(aes(Bioregion, estimate), size = 3, col = "#000000")+
+  geom_errorbar(aes(x = Bioregion, ymin = lower.HPD, ymax = upper.HPD),
+                col = "#80AB82", size = 3.5, width = 0, alpha = 1)+
+  # geom_errorbar(aes(x = Bioregion, ymin = hdi10, ymax = hdi90, col = var),
+  #               col = "#80AB82", size = 2.5, width = 0, alpha = .7)+
+  # geom_errorbar(aes(x = Bioregion, ymin = hdi5, ymax = hdi95, col = var),
+  #               col = "#80AB82", size = 1.5, width = 0, alpha = .5)+
+  geom_point(aes(x = reorder(Bioregion, -estimate, na.rm = TRUE), y = estimate), size = 3, col = "#000000")+
+  # geom_text(aes(x = Bioregion, y = mean, label = paste(cores)), nudge_x = .2, size = 4)+
+  # geom_hline(aes(yintercept = 0))+
+  gg_options()+ 
+  ylab(expression(paste("Difference in sediment OC stock (Mg ", ha^{-1}, ")")))+
+  xlab("Bioregion")+
+  theme(legend.position = "none")+
+  # theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  # scale_color_manual(values= c("#465775", "#169873", "#984447", "#F6AA1C", "#78C3FB", "#E0ACD5"))+
+  theme(axis.title = element_text(size = 22))+
+  theme(axis.text = element_text(size = 12))+
+  theme(legend.text = element_text(size = 16))+
+  theme(legend.title = element_text(size = 12))+
+  theme(axis.title.y = element_text(vjust = 1.2))+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+  coord_flip()+
+  scale_y_continuous(breaks = round(seq(min(-50), max(150), by = 25),1))+
+  geom_hline(aes(yintercept = 0))+
+  geom_shadowtext(aes(x = Bioregion, y = estimate, label = paste("n =", n)), nudge_x = .2, size = 4, col = "black", bg.color="white")
+
+
+life_history_figure
+
+png(here("Output", "Figures", "Life_History_Pairwise.png"),
+    units = "in",
+    res = 1200,
+    height = 6,
+    width = 8)
+
+life_history_figure
+
+dev.off()
+
+#### ####
+
+### Tidal Class ###
+
+tidal_class_figure <- tidal_class %>% 
+  ggplot() +
+  # geom_violin(data = d.bioregion_td, aes(var, Est))+
+  geom_point(aes(Bioregion, estimate), size = 3, col = "#000000")+
+  geom_errorbar(aes(x = Bioregion, ymin = lower.HPD, ymax = upper.HPD, col = var),
+                col = "#AD5D4E", size = 3.5, width = 0, alpha = 1)+
+  # geom_errorbar(aes(x = Bioregion, ymin = hdi10, ymax = hdi90, col = var),
+  #               col = "#AD5D4E", size = 2.5, width = 0, alpha = .7)+
+  # geom_errorbar(aes(x = Bioregion, ymin = hdi5, ymax = hdi95, col = var),
+  #               col = "#AD5D4E", size = 1.5, width = 0, alpha = .5)+
+  geom_point(aes(x = reorder(Bioregion, -estimate, na.rm = TRUE), y = estimate), size = 3, col = "#000000")+
+  # geom_shadowtext(aes(x = Bioregion, y = estimate, label = paste(cores)), nudge_x = .2, size = 4, col = "black", bg.color="white")+
+  # stat_dots(quantiles = 100)+
+  gg_options()+
+  ylab(expression(paste("Difference in sediment OC stock (Mg ", ha^{-1}, ")")))+
+  xlab("Bioregion")+
+  theme(legend.position = "none")+
+  # theme(axis.text.y = element_text(angle = 45, vjust = 0, hjust=1))+
+  # scale_color_manual(values= c("#465775", "#169873", "#984447", "#F6AA1C", "#78C3FB", "#E0ACD5"))+
+  theme(axis.title = element_text(size = 22))+
+  theme(axis.text = element_text(size = 12))+
+  theme(legend.text = element_text(size = 11))+
+  theme(legend.title = element_text(size = 12))+
+  theme(axis.title.y = element_text(vjust = 1.2))+
+  # theme(axis.text.y = element_blank())+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+  coord_flip()+
+  geom_hline(aes(yintercept = 0))+
+  geom_shadowtext(aes(x = Bioregion, y = estimate, label = paste("n =", n)), nudge_x = .2, size = 4, col = "black", bg.color="white")
+
+
+tidal_class_figure
+
+
+png(here("Output", "Figures", "Tidal_Class_Pairwise.png"),
+    units = "in",
+    res = 1200,
+    height = 6,
+    width = 8)
+
+tidal_class_figure
+
+dev.off()
+
+#### ####
+
+
+### Hydrologic Setting Pairs ###
+
+hydrologic_setting_figure <- hydrologic_setting %>% 
+  ggplot() +
+  geom_point(aes(Bioregion, estimate), size = 3, col = "#000000")+
+  geom_errorbar(aes(x = Bioregion, ymin = lower.HPD, ymax = upper.HPD),
+                col = "#D74E09", size = 3.5, width = 0, alpha = 1)+
+  # geom_errorbar(aes(x = Bioregion, ymin = hdi10, ymax = hdi90),
+  #               col = "#D74E09", size = 2.5, width = 0, alpha = .7)+
+  # geom_errorbar(aes(x = Bioregion, ymin = hdi5, ymax = hdi95),
+  #               col = "#D74E09", size = 1.5, width = 0, alpha = .5)+
+  geom_point(aes(x = reorder(Bioregion, -estimate, na.rm = TRUE), y = estimate), size = 3, col = "#000000")+
+  # geom_text(aes(x = Bioregion, y = mean, label = paste(cores)), nudge_x = .2, size = 4)+
+  gg_options()+ 
+  ylab(expression(paste("Difference in sediment OC stock (Mg ", ha^{-1}, ")")))+
+  xlab("Bioregion")+
+  theme(legend.position = "none")+
+  theme(axis.title = element_text(size = 22))+
+  theme(axis.text = element_text(size = 12))+
+  theme(legend.text = element_text(size = 11))+
+  theme(legend.title = element_text(size = 12))+
+  theme(axis.title.y = element_text(vjust = 1.2))+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+  coord_flip()+
+  geom_hline(aes(yintercept = 0))+
+  geom_shadowtext(aes(x = Bioregion, y = estimate, label = paste("n =", n)), nudge_x = .2, size = 4, col = "black", bg.color="white")
+
+hydrologic_setting_figure
+
+
+png(here("Output", "Figures", "Hydrologic_Setting_Pairwise.png"), 
+    units = "in",
+    res = 1200,
+    height = 6,
+    width = 8)
+
+hydrologic_setting_figure
+
+dev.off()
+
+#### ####
+
+### Life X Hydrologic Figure -- How to go about this??? ###
 
-#### #### ####
-
-### Species x Bioregion (filter out 160+) ####
 
-species_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Species_Bioregion") %>% 
-  filter(Estimate < 160) %>% 
-  separate(col = "NA.", into = c("Bioregion", "Species"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Bioregion", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Species", repl = ""))
-
-species_bioregion_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "Species_Bioregion") %>% 
-  select(!NA.) %>% 
-  separate(col = "Parameter", into = c("Bioregion", "Species"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "b_Bioregion", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Species", repl = ""))
 
-species_bioregion_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "Species_Bioregion") %>% 
-  select(!NA.) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = " ", repl = "")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = " ", repl = ""))
 
-species_bioregion_data <- merge(species_bioregion_coef, merge(species_bioregion_mcse, species_bioregion_count)) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Amphibolis", repl = "Amphibolis ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Cymodocea", repl = "Cymodocea ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Enhalus", repl = "Enhalus ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Halodule", repl = "Halodule ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Halophila", repl = "Halophila ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Posidonia", repl = "Posidonia ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Syringodium", repl = "Syringodium ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Thalassia", repl = "Thalassia ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Thalassodendron", repl = "Thalassodendron ")) %>% 
-  mutate(Species = str_replace_all(string = Species, pattern = "Zostera", repl = "Zostera ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern "))
 
-write.xlsx(species_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Species_Bioregion", append = TRUE)
 
-#### #### ####
 
-#### #### ####
 
-### Life-History ###
 
-life_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistory_Global") %>% 
-  rename(Parameter = NA.) %>%
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Life_History", repl = ""))
 
-life_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistory_Global") %>% 
-  select(!NA.) %>%
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "b_Life_History", repl = ""))
 
-life_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "LifeHistory_Global") %>% 
-  select(!NA.) %>% 
-  rename(Parameter = Life_History)
-
-life_data <- merge(life_coef, merge(life_mcse, life_count))
-
-write.xlsx(life_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "LifeHistory_Global", append = TRUE)
-
-### Life-History X Bioregion ###
-
-life_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "LifeHistory_Bioregion") %>% 
-  separate(col = "NA.", into = c("Bioregion", "Life_History"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Bioregion", repl = "")) %>%
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-")) %>%  
-  mutate(Life_History = str_replace_all(string = Life_History, pattern = "Life_History", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern "))
-
-life_bioregion_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "LifeHistory_Bioregion") %>% 
-  select(!NA.) %>% 
-  separate(col = "Parameter", into = c("Bioregion", "Life_History"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "b_Bioregion", repl = "")) %>%
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-")) %>%  
-  mutate(Life_History = str_replace_all(string = Life_History, pattern = "Life_History", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern "))
-
-life_bioregion_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "LifeHistory_Bioregion") %>% 
-  select(!NA.)
-
-life_bioregion_data <- merge(life_bioregion_coef, merge(life_bioregion_mcse, life_bioregion_count))
-
-write.xlsx(life_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "LifeHistory_Bioregion", append = TRUE)
-
-
-#### #### #### ####
-
-
-### Tidal class ###
-
-tidal_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "TidalClass_Global") %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Tidal_Class", repl = "")) 
-
-tidal_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "TidalClass_Global") %>% 
-  select(!NA.) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "b_Tidal_Class", repl = "")) 
-
-tidal_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "TidalClass_Global") %>% 
-  select(!NA.) %>% 
-  rename(Parameter = Tidal_Class)
-
-tidal_data <- merge(tidal_coef, merge(tidal_mcse, tidal_count))
-
-write.xlsx(tidal_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "TidalClass_Global", append = TRUE)
-
-#### #### ####
-
-
-### Tidal Class x Bioregion ###
-
-tidal_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "TidalClass_Bioregion") %>% 
-  rename(Parameter = NA.) %>% 
-  separate(col = "Parameter", into = c("Bioregion", "Tidal_Class"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Bioregion", repl = "")) %>% 
-  mutate(Tidal_Class = str_replace_all(string = Tidal_Class, pattern = "Tidal_Class", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-"))
-
-tidal_bioregion_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "TidalClass_Bioregion") %>% 
-  select(!NA.) %>% 
-  separate(col = "Parameter", into = c("Bioregion", "Tidal_Class"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "b_Bioregion", repl = "")) %>% 
-  mutate(Tidal_Class = str_replace_all(string = Tidal_Class, pattern = "Tidal_Class", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-"))
-
-tidal_bioregion_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "TidalClass_Bioregion") %>% 
-  select(!NA.)
-
-tidal_bioregion_data <- merge(tidal_bioregion_coef, merge(tidal_bioregion_mcse, tidal_bioregion_count))
-
-write.xlsx(tidal_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "TidalClass_Bioregion", append = TRUE)
-
-#### #### ####
-
-### Hydrologic Setting ###
-
-hydrologic_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "HydrologicSetting_Global") %>% 
-  rename(Parameter = NA.) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "Hydrologic_Setting", repl = ""))
-
-hydrologic_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "HydrologicSetting_Global") %>% 
-  select(!NA.) %>% 
-  mutate(Parameter = str_replace_all(string = Parameter, pattern = "b_Hydrologic_Setting", repl = ""))
-
-hydrologic_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "HydrologicSetting_Global") %>% 
-  select(!NA.) %>% 
-  rename(Parameter = Hydrologic_Setting)
-
-hydrologic_data <- merge(hydrologic_coef, merge(hydrologic_mcse, hydrologic_count))
-
-write.xlsx(hydrologic_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "HydrologicSetting_Global", append = TRUE)
-
-#### #### ####
-
-### Hydrologic Setting x Bioregion ###
-
-hydrologic_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "HydrologicSetting_Bioregion") %>% 
-  rename(Parameter = NA.) %>% 
-  separate(col = "Parameter", into = c("Bioregion", "Hydrologic_Setting"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Bioregion", repl = "")) %>% 
-  mutate(Hydrologic_Setting = str_replace_all(string = Hydrologic_Setting, pattern = "Hydrologic_Setting", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-"))
-
-hydrologic_bioregion_mcse <- read.xlsx(here("Output", "BayesianAnalysis", "MCSE", "MCSE_Outputs.xlsx"), sheetName = "HydrologicSetting_Bioregion") %>% 
-  select(!NA.) %>% 
-  separate(col = "Parameter", into = c("Bioregion", "Hydrologic_Setting"), sep = ":") %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "b_Bioregion", repl = "")) %>% 
-  mutate(Hydrologic_Setting = str_replace_all(string = Hydrologic_Setting, pattern = "Hydrologic_Setting", repl = "")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Tropical", repl = "Tropical ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Temperate", repl = "Temperate ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "North", repl = "North ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "Southern", repl = "Southern ")) %>% 
-  mutate(Bioregion = str_replace_all(string = Bioregion, pattern = "oM", repl = "o-"))
-
-hydrologic_bioregion_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.xlsx"), sheetName = "HydrologicSetting_Bioregion") %>% 
-  select(!NA.)
-
-hydrologic_bioregion_data <- merge(hydrologic_bioregion_coef, merge(hydrologic_bioregion_mcse, hydrologic_bioregion_count))
-
-write.xlsx(hydrologic_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "HydrologicSetting_Bioregion", append = TRUE)
-
-#### #### ####
-
-
-
-
-
-
-
-
-
-#### Pair-wise comparisons.
-
-### Life-History Pairs ### 
-
-life_pairs_coef <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistory_Global") %>% 
-  select(!NA.) %>% 
-  mutate(Bioregion = "Global")
-
-life_pairs_count <- as.data.frame(life_global %>% summarize(n = n(), cores = sum(cores))) %>% 
-  mutate(Bioregion = "Global")
-  
-life_pairs_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistory_Bioregion") %>% 
-  select(!NA.)
-
-life_pairs_bioregion_count <- as.data.frame(life_bioregion %>% group_by(Bioregion) %>% summarize(n = n(), cores = sum(cores)))
-
-life_pairs_data <- rbind(merge(life_pairs_coef, life_pairs_count), merge(life_pairs_bioregion_coef, life_pairs_bioregion_count))
-
-write.xlsx(life_pairs_data, here("Output", "Tables", "Pairwise.xlsx"), sheetName = "LifeHistory")
-
-#### #### ####
-
-
-
-### Tidal Class Pairs ###
-
-tidal_pairs_coef <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "TidalClass_Global") %>% 
-  select(!NA.) %>% 
-  mutate(Bioregion = "Global")
-
-tidal_pairs_count <- as.data.frame(tidal_global %>% summarize(n = n(), cores = sum(cores))) %>% 
-  mutate(Bioregion = "Global")
-
-tidal_pairs_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "TidalClass_Bioregion") %>% 
-  select(!NA.)
-
-
-tidal_pairs_bioregion_count <- as.data.frame(tidal_bioregion %>% group_by(Bioregion) %>% summarize(n = n(), cores = sum(cores)))
-
-tidal_pairs_data <- rbind(merge(tidal_pairs_coef, tidal_pairs_count), merge(tidal_pairs_bioregion_coef, tidal_pairs_bioregion_count))
-
-write.xlsx(tidal_pairs_data, here("Output", "Tables", "Pairwise.xlsx"), sheetName = "TidalClass", append = TRUE)
-
-#### #### ####
-
-
-
-#### Hydrologic Pairs ####
-
-hydrologic_pairs_coef <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Hydrologic_Global") %>% 
-  select(!NA.) %>% 
-  mutate(Bioregion = "Global")
-
-hydrologic_pairs_count <- as.data.frame(hydrologic_global %>% summarize(n = n(), cores = sum(cores))) %>% 
-  mutate(Bioregion = "Global")
-
-
-hydrologic_pairs_bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "Hydrologic_Bioregion") %>% 
-  select(!NA.)
-
-hydrologic_pairs_bioregion_count <- as.data.frame(hydrologic_bioregion %>% group_by(Bioregion) %>% summarize(n = n(), cores = sum(cores)))
-
-hydrologic_pairs_data <- rbind(merge(hydrologic_pairs_coef, hydrologic_pairs_count), merge(hydrologic_pairs_bioregion_coef, hydrologic_pairs_bioregion_count))
-
-write.xlsx(hydrologic_pairs_data, here("Output", "Tables", "Pairwise.xlsx"), sheetName = "HydrologicSetting", append = TRUE)
-
-#### #### ####
-
-### Life-History across hydrologic settings ###
 
 
 

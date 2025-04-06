@@ -24,7 +24,8 @@ global_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "counts.x
   rename(Parameter = NA.) %>% 
   mutate(Parameter = "Global")
 
-global_data <- merge(global_coef, merge(global_mcse, global_count))
+global_data <- merge(global_coef, merge(global_mcse, global_count)) %>% 
+  mutate(sig = "")
 
 bioregion_coef <- read.xlsx(here("Output", "BayesianAnalysis", "fixef_estimates", "Coefficients.xlsx"), sheetName = "Bioregions") %>% 
   rename(Parameter = NA.) %>% 
@@ -43,11 +44,12 @@ bioregion_count <- read.xlsx(here("Output", "BayesianAnalysis", "counts", "count
                        "Temperate North Pacific", "Temperate Southern Oceans", 
                        "Tropical Atlantic", "Tropical Indo-Pacific"))
 
-bioregion_data <- merge(bioregion_coef, merge(bioregion_mcse, bioregion_count))
+bioregion_data <- merge(bioregion_coef, merge(bioregion_mcse, bioregion_count)) %>% 
+  mutate(sig = c("a", "b", "bc", "bc", "b", "c"))
 
 global_bioregion_data <- rbind(global_data, bioregion_data)
 
-write.xlsx(global_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Global_Bioregion")
+write.xlsx(global_bioregion_data, here("Output", "Tables", "SedCorgStockEstimates.xlsx"), sheetName = "Global_Bioregion", row.names = FALSE)
 
 #### #### ####
 
@@ -363,6 +365,22 @@ write.xlsx(hydrologic_pairs_data, here("Output", "Tables", "Pairwise.xlsx"), she
 #### #### ####
 
 ### Life-History across hydrologic settings ###
+
+life_hydrologic_pairs <- read.xlsx(here("Output", "BayesianAnalysis", "emmeans_pairs", "emmeans_output.xlsx"), sheetName = "LifeHistoryxHydrologic_Global") %>% 
+  select(!NA.) %>% 
+  mutate(Bioregion = "Global")
+
+life_hydrologic_pairs_count <- life_hydrologic_global %>% group_by(Hydrologic_Setting) %>% summarize(n = n(), cores = sum(cores))
+
+life_hydrologic_bioregion_pairs <- x
+
+life_hydrologic_bioregion_pairs_count <- life_hydrologic_bioregion %>% group_by(Bioregion, Hydrologic_Setting) %>% summarize(n = n(), cores = sum(cores))
+
+
+
+pairs(contrast(emmeans(mod_life_hydrologic_bioregion, ~ Life_History | Hydrologic_Setting | Bioregion)), by = NULL)
+
+
 
 
 
