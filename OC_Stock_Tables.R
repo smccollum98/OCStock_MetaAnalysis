@@ -378,7 +378,7 @@ life_hydrologic_bioregion_pairs_count <- life_hydrologic_bioregion %>% group_by(
 
 
 
-pairs(contrast(emmeans(mod_life_hydrologic_bioregion, ~ Life_History | Hydrologic_Setting | Bioregion)), by = NULL)
+# pairs(contrast(emmeans(mod_life_hydrologic_bioregion, ~ Life_History | Hydrologic_Setting | Bioregion)), by = NULL)
 
 
 

@@ -119,7 +119,8 @@ hydrologic_bioregion <- hydrologic_global
 life_tidal_global <- merge(life_global, tidal_global)
   ## Bioregional
       ## Remove bioregions with insufficient counts of a given combo of life-history and tidal class
-      # life_tidal_bioregion %>% group_by(Bioregion, Life_History, Tidal_Class) %>% summarize(n = n())
+      ## life_tidal_global %>% group_by(Life_History, Tidal_Class) %>% summarize(n())
+      ## life_tidal_bioregion %>% group_by(Bioregion, Life_History, Tidal_Class) %>% summarize(n = n())
       ## Temperate Southern Oceans (Persistent X Intertidal) has insufficient count (2)
           ## Do we drop that combo or the whole bioregion?
 life_tidal_bioregion <- merge(life_bioregion, tidal_bioregion) %>% filter(Bioregion != "Temperate Southern Oceans")
@@ -129,7 +130,8 @@ life_tidal_bioregion <- merge(life_bioregion, tidal_bioregion) %>% filter(Bioreg
 life_hydrologic_global <- merge(life_global, hydrologic_global)
   ## Bioregional
       ## Remove bioregions with insufficient counts of a given combo of life-history and tidal class
-      ## View(life_hydrologic_bioregion %>% group_by(Bioregion, Life_History, Hydrologic_Setting) %>% summarize(n = n()))
+      #life_hydrologic_global %>% group_by(Life_History, Hydrologic_Setting) %>% summarize(n = n())
+      #View(life_hydrologic_bioregion %>% group_by(Bioregion, Life_History, Hydrologic_Setting) %>% summarize(n = n()))
       ## Fewest are Med X persistent X estuarine (4) and Med X colonizing X estuarine (4) - which are sufficient (>= 4)
 life_hydrologic_bioregion <- merge(life_bioregion, hydrologic_bioregion)
 
@@ -138,6 +140,7 @@ life_hydrologic_bioregion <- merge(life_bioregion, hydrologic_bioregion)
 tidal_hydrologic_global <- merge(tidal_global, hydrologic_global)
   ## Bioregional
       ## Remove bioregions with insufficient counts of a given combo of tidal class and hydrologic setting
+      ## tidal_hydrologic_global %>% group_by(Tidal_Class, Hydrologic_Setting) %>% summarize(n = n())
       ## View(tidal_hydrologic_bioregion %>% group_by(Bioregion, Tidal_Class, Hydrologic_Setting) %>% summarize(n = n()))
       ## Med X Int X C/E; Med X Sub X E; TNA X Int C; TSO X Int X C all 2 or less
 tidal_hydrologic_bioregion <- merge(tidal_bioregion, hydrologic_bioregion) %>% filter(Bioregion != "Mediterranean", 
@@ -149,6 +152,7 @@ tidal_hydrologic_bioregion <- merge(tidal_bioregion, hydrologic_bioregion) %>% f
 life_tidal_hydrologic_global <- merge(life_global, merge(tidal_global, hydrologic_global))
   ## Bioregional
         ## Remove bioregions with insufficient counts of a given combo of life-history, tidal class and hydrologic setting
+        #life_tidal_hydrologic_global %>% group_by(Life_History, Tidal_Class, Hydrologic_Setting) %>% summarize(n = n())
         ## View(life_tidal_hydrologic_bioregion %>% group_by(Bioregion, Life_History, Tidal_Class, Hydrologic_Setting) %>% summarize(n = n()))
         ## list: MCIC (1); MCIE (2); MCSE (2); TNACIC (2); TSOPIC (2); TIPPSE (3)
 life_tidal_hydrologic_bioregion <- merge(life_bioregion, merge(tidal_bioregion, hydrologic_bioregion)) %>% filter(Bioregion != "Mediterranean",
@@ -922,7 +926,12 @@ pairs(emmeans(mod_life_hydrologic_bioregion, ~ Life_History * Hydrologic_Setting
 
 pairs(emmeans(mod_life_hydrologic_global, ~ Hydrologic_Setting * Life_History), simple = "each")
 
-pairs(emmeans(mod_life_tidal_bioregion, ~ Tidal_Class * Life_History), simple = "each")
+#This seems to be the correct format.
+pairs(emmeans(mod_life_hydrologic_bioregion, ~ Hydrologic_Setting * Bioregion | Life_History), simple = "each")
+pairs(emmeans(mod_life_hydrologic_bioregion, ~ Life_History * Bioregion | Hydrologic_Setting), simple = "each")
+# 
+# 
+# pairs(emmeans(mod_life_tidal_bioregion, ~ Tidal_Class * Life_History), simple = "each")
 
 #### #### ####
 
